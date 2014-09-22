@@ -260,7 +260,15 @@ class ImporterController < ApplicationController
     unique_attr_checked = false  # Used to optimize some work that has to happen inside the loop   
 
     # attrs_map is fields_map's invert
-    attrs_map = fields_map.invert
+    # attrs_map = fields_map.invert
+    attrs_map = {}
+    fields_map.each do |key, val|
+      attrs_map[val] ||= []
+      attrs_map[val] << key
+    end
+    attrs_map.each do |k, v|
+      attrs_map[k] = v.join() if v.length == 1
+    end
 
     # check params
     unique_error = nil
@@ -298,7 +306,7 @@ class ImporterController < ApplicationController
 
           row[k] = v
         end
-
+       
         tracker = Tracker.find_by_name(row[attrs_map["tracker"]])
         status = IssueStatus.find_by_name(row[attrs_map["status"]])
         author = attrs_map["author"] ? user_for_login!(row[attrs_map["author"]]) : User.current
@@ -396,7 +404,16 @@ class ImporterController < ApplicationController
       issue.subject = row[attrs_map["subject"]] || issue.subject
       
       # optional attributes
-      description = row[attrs_map["description"]]
+     
+      description = []
+      attrs_map["description"] = [attrs_map["description"]].flatten
+
+      attrs_map["description"].each do |dc|
+        description << "h3. " + '*+' + dc + '+*' +"\n\n"  unless row[dc].blank?
+        description << row[dc]
+      end
+      description = description.join("\n\n")
+      
       issue.description = description ?
           description.gsub(/\r\n?|\\n|<br\s*\/?>/, "\n") : issue.description
       issue.category_id = category != nil ? category.id : issue.category_id
@@ -406,7 +423,8 @@ class ImporterController < ApplicationController
       issue.fixed_version_id = fixed_version_id != nil ? fixed_version_id : issue.fixed_version_id
       issue.done_ratio = row[attrs_map["done_ratio"]] || issue.done_ratio
       issue.estimated_hours = row[attrs_map["estimated_hours"]] || issue.estimated_hours
-
+      issue.position = -100 # it's default
+    
       # parent issues
       begin
         parent_value = row[attrs_map["parent_issue"]]
@@ -431,8 +449,9 @@ class ImporterController < ApplicationController
 
       # custom fields
       custom_failed_count = 0
-      issue.custom_field_values = issue.available_custom_fields.inject({}) do |h, cf|
+      issue.custom_field_values = project.issue_custom_fields.inject({}) do |h, cf|
         value = row[attrs_map[cf.name]]
+
         if value.present?
           begin
             if cf.field_format == 'user'
@@ -445,6 +464,9 @@ class ImporterController < ApplicationController
               value = value.split(',').map(&:strip)
             elsif cf.field_format == 'text'
               value = value.gsub(/\r\n?|\\n|<br\s*\/?>/, "\n")
+            elsif cf.field_format == 'bool'
+              value = 1 if value == "Tak"
+              value = 0 if value == "Nie"
             end
             h[cf.id] = value
           rescue
@@ -484,7 +506,7 @@ class ImporterController < ApplicationController
         end
       end
       next if watcher_failed_count > 0
-
+    
       unless issue.save
         @failed_count += 1
         @failed_issues[@failed_count] = row

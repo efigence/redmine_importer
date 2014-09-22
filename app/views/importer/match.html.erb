@@ -38,7 +38,7 @@
 	
 	<fieldset class="box"><legend><%= l(:label_import_rule) %></legend>
 		<label><%= l(:label_default_tracker) %>
-		<%= select_tag "default_tracker", options_from_collection_for_select(@project.trackers, 'id', 'name') %></label><br/>
+		<%= select_tag "default_tracker", options_from_collection_for_select(@project.trackers, 'id', 'name', 4) %></label><br/>
 		
 		<label><%= l(:label_unique_field) %>
 		<%= select_tag "unique_field", raw("<option value=\"\">#{l(:option_ignore)}</option>") +
